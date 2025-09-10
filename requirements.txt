@@ -1,0 +1,9 @@
+langchain>=0.2.3
+langchain-community
+chromadb
+huggingface-hub
+python-dotenv
+tqdm
+
+
+pip install beautifulsoup4 python-dotenv langchain langchain-community chromadb huggingface_hub langchain-huggingface
