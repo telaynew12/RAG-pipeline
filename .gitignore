@@ -1,4 +1,6 @@
 __pycache__/
 *.pyc
 .env
-.venv/
+venv/
+data/indexes/
+chat_sessions
