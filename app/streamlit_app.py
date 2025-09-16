@@ -158,11 +158,11 @@ if st.session_state.confirm_delete:
                 st.session_state.messages = []
                 st.session_state.session_name = None
             st.session_state.confirm_delete = None
-            st.experimental_rerun()
+            st.rerun()
     with colB:
         if st.button("❌ Cancel"):
             st.session_state.confirm_delete = None
-            st.experimental_rerun()
+            st.rerun()
 
 # ----------------------
 # Display previous messages
