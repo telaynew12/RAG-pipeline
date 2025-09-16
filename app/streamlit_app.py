@@ -1,22 +1,21 @@
 import os
 import json
-import requests
 import streamlit as st
-from pathlib import Path
+from dotenv import load_dotenv
 from langchain.memory import ConversationBufferMemory
-from app.pipeline import (
-    ingest_and_chunk,
-    build_faiss,
-    build_bm25,
-    HybridRetriever
-)
+from app.pipeline import ingest_and_chunk, build_faiss, build_bm25, HybridRetriever
 
 # ----------------------
-# Configuration
+# Load local .env if exists
 # ----------------------
-API_TOKEN = os.getenv("API_TOKEN")
+load_dotenv()  # loads .env file in project root
+
+# ----------------------
+# Get API token (Streamlit secrets or .env)
+# ----------------------
+API_TOKEN = st.secrets.get("API_TOKEN") or os.getenv("API_TOKEN")
 if not API_TOKEN:
-    st.error("❌ API token not found. Set API_TOKEN in your environment.")
+    st.error("❌ API token not found. Set it in Streamlit secrets or .env locally.")
     st.stop()
 
 HEADERS = {
@@ -25,27 +24,23 @@ HEADERS = {
 }
 URL = "https://api.deepinfra.com/v1/openai/chat/completions"
 
-# Directory to save chat sessions
+# ----------------------
+# Directories
+# ----------------------
 CHAT_SAVE_DIR = "chat_sessions"
+INDEX_DIR = "data/indexes"
 os.makedirs(CHAT_SAVE_DIR, exist_ok=True)
-
-# ----------------------
-# Index paths
-# ----------------------
-INDEX_DIR = Path("data/indexes")
-FAISS_PATH = INDEX_DIR / "faiss.index"
-BM25_PATH = INDEX_DIR / "bm25.pkl"
-META_PATH = INDEX_DIR / "meta.pkl"
+os.makedirs(INDEX_DIR, exist_ok=True)
 
 # ----------------------
 # Build indexes if missing
 # ----------------------
-if not FAISS_PATH.exists() or not BM25_PATH.exists() or not META_PATH.exists():
-    st.info("📦 Building FAISS and BM25 indexes... This may take a few minutes.")
+if not os.path.exists(os.path.join(INDEX_DIR, "faiss.index")) or not os.path.exists(os.path.join(INDEX_DIR, "bm25.pkl")):
+    st.info("📚 Indexes not found. Building FAISS and BM25 indexes. This may take a few minutes...")
     chunks = ingest_and_chunk()
     build_faiss(chunks)
     build_bm25(chunks)
-    st.success("✅ Indexes built successfully!")
+    st.success("✅ Indexes built successfully.")
 
 # ----------------------
 # Initialize Retriever + Memory
@@ -97,6 +92,7 @@ def generate_reply(query):
         "temperature": 0.7
     }
 
+    import requests
     response = requests.post(URL, headers=HEADERS, json=payload)
     if response.status_code != 200:
         return f"❌ API Error: {response.text}"
@@ -108,7 +104,7 @@ def generate_reply(query):
 # ----------------------
 # Streamlit UI
 # ----------------------
-st.set_page_config(page_title="📩 AI Chatbot", layout="wide")
+st.set_page_config(page_title="AI Chatbot", layout="wide")
 st.title("📩 AI Chatbot")
 
 # ----------------------
@@ -181,20 +177,23 @@ for msg in st.session_state.messages:
 user_input = st.chat_input("Type your message...")
 
 if user_input:
+    # If new chat: assign name from the first user message using spaces
     if st.session_state.session_name is None:
         short_name = " ".join(user_input.strip().split()[:5])
         st.session_state.session_name = short_name
 
+    # Show user message
     st.chat_message("user").write(user_input)
     st.session_state.messages.append({"role": "user", "content": user_input})
 
+    # Generate AI reply
     with st.spinner("AI is typing..."):
         reply = generate_reply(user_input)
         memory.save_context({"input": user_input}, {"output": reply})
         st.session_state.messages.append({"role": "assistant", "content": reply})
         st.chat_message("assistant").write(reply)
 
-    # Save chat
+    # Save or update chat file
     filename = st.session_state.session_name.replace(" ", "_") + ".json"
     save_path = os.path.join(CHAT_SAVE_DIR, filename)
     with open(save_path, "w") as f:

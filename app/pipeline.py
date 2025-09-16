@@ -31,6 +31,7 @@ def ingest_and_chunk():
         chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP
     )
     chunks = splitter.split_documents(docs)
+    print(f"✅ Created {len(chunks)} chunks.")
     return chunks
 
 def build_faiss(chunks):
@@ -58,6 +59,41 @@ def build_bm25(chunks):
     with open(INDEX_DIR / "bm25.pkl", "wb") as f:
         pickle.dump({"bm25": bm25, "metas": metas}, f)
     print("✅ BM25 index ready.")
+
+# ----------------------
+# Hybrid Retriever for Streamlit
+# ----------------------
+class HybridRetriever:
+    def __init__(self):
+        # Load FAISS
+        faiss_index_path = INDEX_DIR / "faiss.index"
+        self.faiss_index = faiss.read_index(str(faiss_index_path))
+        with open(INDEX_DIR / "meta.pkl", "rb") as f:
+            self.faiss_metas = pickle.load(f)
+        self.embedding_model = SentenceTransformer(EMBED_MODEL)
+
+        # Load BM25
+        with open(INDEX_DIR / "bm25.pkl", "rb") as f:
+            bm25_data = pickle.load(f)
+        self.bm25 = bm25_data["bm25"]
+        self.bm25_metas = bm25_data["metas"]
+
+    def retrieve(self, query, top_k=5):
+        # FAISS semantic search
+        q_vector = self.embedding_model.encode([query], convert_to_numpy=True)
+        distances, indices = self.faiss_index.search(q_vector, top_k)
+        faiss_results = [self.faiss_metas[i]["text"] for i in indices[0]]
+
+        # BM25 keyword search
+        tokenized_query = query.lower().split()
+        scores = self.bm25.get_scores(tokenized_query)
+        top_indices = scores.argsort()[-top_k:][::-1]
+        bm25_results = [self.bm25_metas[i]["text"] for i in top_indices]
+
+        # Combine results and deduplicate
+        combined = list(dict.fromkeys(faiss_results + bm25_results))
+        return [{"text": t} for t in combined[:top_k]]
+
 
 if __name__ == "__main__":
     chunks = ingest_and_chunk()

@@ -1,5 +1,5 @@
 fastapi
-uvicorn
+
 langchain
 langchain-community
 sentence-transformers
@@ -8,3 +8,6 @@ rank-bm25
 python-dotenv
 PyYAML
 tqdm
+streamlit
+
+
